@@ -36,14 +36,14 @@ class BaseProvider(ABC):
         tools: list[dict[str, Any]] | None = None,
         tool_calling: dict[str, Any] | None = None,
     ) -> ProviderResponse:
-        raise NotImplementedError
+        pass
 
     @abstractmethod
-    async def stream(
+    def stream(
         self,
         messages: list[dict[str, Any]],
         *,
         tools: list[dict[str, Any]] | None = None,
         tool_calling: dict[str, Any] | None = None,
     ) -> AsyncIterator[str]:
-        raise NotImplementedError
+        pass

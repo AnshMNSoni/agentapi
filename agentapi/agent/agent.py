@@ -45,7 +45,7 @@ class Agent:
         self.tool_calling = self._default_tool_calling_for(self.provider_name)
         if tool_calling:
             self.tool_calling.update(tool_calling)
-        self.memory = memory or InMemoryMemory(system_prompt=system_prompt)
+        self.memory = memory or InMemoryMemory()
 
         self._settings = settings
         self._provider: BaseProvider | None = provider if isinstance(provider, BaseProvider) else None
@@ -61,25 +61,32 @@ class Agent:
         self._tools[definition.name] = definition
 
     def reset_memory(self) -> None:
-        """Clear conversation state but preserve system prompt."""
+        """Clear conversation state but preserve the agent system prompt."""
 
-        self.memory.reset(system_prompt=self.system_prompt)
+        self.memory.reset()
+
+    def _conversation_messages(self, extra_messages: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+        messages: list[dict[str, Any]] = [{"role": "system", "content": self.system_prompt}]
+        messages.extend(self.memory.messages)
+        if extra_messages:
+            messages.extend(extra_messages)
+        return messages
 
     async def run(self, message: str, *, max_tool_rounds: int = 3) -> str:
         """Execute a chat completion with optional tool-calling loop."""
 
-        self.memory.add({"role": "user", "content": message})
+        conversation_messages = self._conversation_messages([{"role": "user", "content": message}])
         provider = self._get_provider()
 
         for _ in range(max_tool_rounds + 1):
             response = await provider.chat(
-                self.memory.messages,
+                conversation_messages,
                 tools=self._tool_schemas(),
                 tool_calling=self.tool_calling,
             )
 
             if response.tool_calls:
-                self.memory.add(
+                conversation_messages.append(
                     {
                         "role": "assistant",
                         "content": response.content or "",
@@ -97,25 +104,27 @@ class Agent:
                     }
                 )
 
-                await self._execute_tool_calls(response.tool_calls)
+                await self._execute_tool_calls(response.tool_calls, conversation_messages)
                 continue
 
+            self.memory.add({"role": "user", "content": message})
             self.memory.add({"role": "assistant", "content": response.content})
             return response.content
 
         fallback = "Tool loop reached max rounds without final response"
+        self.memory.add({"role": "user", "content": message})
         self.memory.add({"role": "assistant", "content": fallback})
         return fallback
 
     async def stream(self, message: str) -> AsyncIterator[str]:
         """Stream model tokens and persist final assistant message."""
 
-        self.memory.add({"role": "user", "content": message})
+        conversation_messages = self._conversation_messages([{"role": "user", "content": message}])
         provider = self._get_provider()
 
         collected: list[str] = []
         async for token in provider.stream(
-            self.memory.messages,
+            conversation_messages,
             tools=self._tool_schemas(),
             tool_calling=self.tool_calling,
         ):
@@ -123,6 +132,7 @@ class Agent:
             yield token
 
         full_text = "".join(collected)
+        self.memory.add({"role": "user", "content": message})
         self.memory.add({"role": "assistant", "content": full_text})
 
     def _create_provider(self, settings: Any) -> BaseProvider:
@@ -198,11 +208,11 @@ class Agent:
             return None
         return [tool.schema for tool in self._tools.values()]
 
-    async def _execute_tool_calls(self, calls: list[ToolCall]) -> None:
+    async def _execute_tool_calls(self, calls: list[ToolCall], conversation_messages: list[dict[str, Any]]) -> None:
         for call in calls:
             tool_def = self._tools.get(call.name)
             if not tool_def:
-                self.memory.add(
+                conversation_messages.append(
                     {
                         "role": "tool",
                         "tool_call_id": call.id,
@@ -221,7 +231,7 @@ class Agent:
             except Exception as exc:  # noqa: BLE001
                 output = f"Tool execution failed: {exc}"
 
-            self.memory.add(
+            conversation_messages.append(
                 {
                     "role": "tool",
                     "tool_call_id": call.id,

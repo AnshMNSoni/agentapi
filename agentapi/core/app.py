@@ -135,7 +135,7 @@ class AgentAPI(FastAPI):
             swagger_favicon_url=self._agentapi_favicon_path,
         )
 
-        html = base.body.decode("utf-8")
+        html = bytes(base.body).decode("utf-8")
         inject = f"""
 <script>
 window.addEventListener('load', function () {{

@@ -28,20 +28,19 @@ class MemoryBackend(ABC):
         """Append one message to the conversation."""
 
     @abstractmethod
-    def reset(self, system_prompt: str | None = None) -> None:
-        """Clear messages and optionally restore system prompt."""
+    def reset(self) -> None:
+        """Clear all stored messages for the conversation."""
 
 
 class InMemoryMemory(MemoryBackend):
     """Stores chat messages in process memory with per-conversation isolation.
-    
+
     Supports multiple conversations keyed by UUID. Ideal for development and
     testing multi-user scenarios without external dependencies.
     """
 
     def __init__(
         self,
-        system_prompt: str | None = None,
         conversation_id: str | None = None,
     ) -> None:
         # Validate and normalize to canonical UUID string if provided; auto-generate otherwise.
@@ -52,13 +51,9 @@ class InMemoryMemory(MemoryBackend):
 
         # Per-conversation message storage and system prompts.
         self._conversations: dict[str, list[dict[str, Any]]] = {}
-        self._system_prompts: dict[str, str | None] = {}
 
         # Initialize this conversation.
         self._conversations[self.conversation_id] = []
-        self._system_prompts[self.conversation_id] = system_prompt
-        if system_prompt:
-            self._conversations[self.conversation_id].append({"role": "system", "content": system_prompt})
 
     @property
     def messages(self) -> list[dict[str, Any]]:
@@ -69,11 +64,8 @@ class InMemoryMemory(MemoryBackend):
             self._conversations[self.conversation_id] = []
         self._conversations[self.conversation_id].append(message)
 
-    def reset(self, system_prompt: str | None = None) -> None:
-        self._system_prompts[self.conversation_id] = system_prompt
+    def reset(self) -> None:
         self._conversations[self.conversation_id] = []
-        if system_prompt:
-            self._conversations[self.conversation_id].append({"role": "system", "content": system_prompt})
 
 
 class RedisMemory(MemoryBackend):
@@ -87,7 +79,6 @@ class RedisMemory(MemoryBackend):
         *,
         redis_url: str,
         conversation_id: str,
-        system_prompt: str | None = None,
         user_id: str | None = None,
         tenant_id: str | None = None,
         ttl_seconds: int = 7 * 24 * 60 * 60,
@@ -103,7 +94,6 @@ class RedisMemory(MemoryBackend):
         self.conversation_id = str(UUID(conversation_id))
         self.user_id = user_id
         self.tenant_id = tenant_id
-        self._system_prompt = system_prompt
         self._ttl_seconds = ttl_seconds
         self._redis = Redis.from_url(redis_url, decode_responses=True)
 
@@ -136,9 +126,6 @@ class RedisMemory(MemoryBackend):
         raw_messages = self._redis.lrange(self._messages_key, 0, -1)
         parsed: list[dict[str, Any]] = []
 
-        if self._system_prompt:
-            parsed.append({"role": "system", "content": self._system_prompt})
-
         for item in raw_messages:
             try:
                 parsed.append(json.loads(item))
@@ -152,8 +139,7 @@ class RedisMemory(MemoryBackend):
         self._redis.rpush(self._messages_key, json.dumps(message))
         self._redis.expire(self._messages_key, self._ttl_seconds)
 
-    def reset(self, system_prompt: str | None = None) -> None:
-        self._system_prompt = system_prompt
+    def reset(self) -> None:
         self._redis.delete(self._messages_key)
 
     def close(self) -> None:
