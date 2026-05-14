@@ -24,7 +24,7 @@ from agentapi.errors import AgentProviderError
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-class AgentApp(FastAPI):
+class AgentAPI(FastAPI):
     """A small FastAPI extension with AgentAPI-focused decorators."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -204,7 +204,7 @@ window.addEventListener('load', function () {{
     def chat(self, path: str, **kwargs: Any) -> Callable[[F], F]:
         """Register a chat route.
 
-        If the handler returns an async iterator, AgentApp automatically responds
+        If the handler returns an async iterator, AgentAPI automatically responds
         as SSE (`text/event-stream`). Otherwise, it returns regular JSON.
         """
 

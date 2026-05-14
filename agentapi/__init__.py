@@ -2,7 +2,7 @@
 
 from agentapi.agent.agent import Agent
 from agentapi.agent.memory import InMemoryMemory, MemoryBackend, RedisMemory, create_conversation_id
-from agentapi.core.app import AgentApp
+from agentapi.core.app import AgentAPI
 from agentapi.errors import AgentConfigurationError
 from agentapi.agent.tools import tool
 from agentapi.providers.base import BaseProvider
@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 __all__ = [
 	"Agent",
-	"AgentApp",
+	"AgentAPI",
 	"tool",
 	"AgentConfigurationError",
 	"BaseProvider",

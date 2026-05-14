@@ -6,7 +6,7 @@ AgentAPI is a lightweight framework for building agentic AI backends with a fami
 
 - A stateful `Agent` with memory and tool calling
 - Provider abstraction for OpenAI, Gemini, and OpenRouter
-- Simple web API layer using `AgentApp`
+ - Simple web API layer using `AgentAPI`
 - Built-in streaming support through Server-Sent Events (SSE)
 - CLI commands to scaffold and run projects
 
@@ -16,9 +16,9 @@ AgentAPI is a lightweight framework for building agentic AI backends with a fami
 
 `Agent` handles prompt orchestration, model calls, tool execution, and conversation memory.
 
-### `AgentApp`
+### `AgentAPI`
 
-`AgentApp` extends FastAPI with chat-focused decorators:
+`AgentAPI` extends FastAPI with chat-focused decorators:
 
 - `@app.chat` for regular or streaming responses
 - `@app.stream` as a streaming-only compatibility alias
@@ -30,9 +30,9 @@ Mark plain Python functions as LLM-callable tools. AgentAPI builds provider-comp
 ## Quick Example
 
 ```python
-from agentapi import Agent, AgentApp
+from agentapi import Agent, AgentAPI
 
-app = AgentApp()
+app = AgentAPI()
 
 agent = Agent(
     system_prompt="You are a helpful assistant",

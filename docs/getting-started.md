@@ -16,9 +16,9 @@ DEFAULT_PROVIDER=openai
 ## 1. Create `main.py`
 
 ```python
-from agentapi import Agent, AgentApp
+from agentapi import Agent, AgentAPI
 
-app = AgentApp()
+app = AgentAPI()
 
 agent = Agent(
     system_prompt="You are a helpful assistant",

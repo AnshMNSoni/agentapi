@@ -5,7 +5,7 @@
 AgentAPI public interface:
 
 ```python
-from agentapi import Agent, AgentApp, tool, AgentConfigurationError, BaseProvider
+from agentapi import Agent, AgentAPI, tool, AgentConfigurationError, BaseProvider
 ```
 
 ## `Agent`
@@ -36,7 +36,7 @@ Notes:
 - `run` is the best default for tool-centric workflows.
 - `stream` is for incremental output over SSE.
 
-## `AgentApp`
+## `AgentAPI`
 
 Subclass of FastAPI with chat decorators and branded docs pages.
 
