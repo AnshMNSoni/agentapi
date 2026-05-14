@@ -115,7 +115,7 @@ class AgentAPI(FastAPI):
         schema.setdefault("info", {})["x-logo"] = {
             "url": self._agentapi_logo_path,
             "altText": "AgentAPI",
-        }
+    }
         self.openapi_schema = schema
         return schema
 
@@ -137,13 +137,87 @@ class AgentAPI(FastAPI):
 
         html = bytes(base.body).decode("utf-8")
         inject = f"""
+<style>
+    body {
+        background: #0b1220;
+    }
+
+    .swagger-ui {
+        color: #e5eefc;
+        background: #0b1220;
+    }
+
+    .swagger-ui .topbar {
+        background-color: #111827;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    .swagger-ui .topbar .download-url-wrapper {
+        display: none;
+    }
+
+    .swagger-ui .scheme-container,
+    .swagger-ui .opblock,
+    .swagger-ui .btn,
+    .swagger-ui .btn.authorize,
+    .swagger-ui section.models,
+    .swagger-ui .responses-wrapper,
+    .swagger-ui .opblock .opblock-summary,
+    .swagger-ui .opblock .opblock-section-header,
+    .swagger-ui .opblock .opblock-body {
+        background: #111827 !important;
+        border-color: rgba(148, 163, 184, 0.18) !important;
+    }
+
+    .swagger-ui .opblock .opblock-summary-description,
+    .swagger-ui .opblock .opblock-summary-path,
+    .swagger-ui .opblock .opblock-summary-method,
+    .swagger-ui .info .title,
+    .swagger-ui .info p,
+    .swagger-ui table thead tr th,
+    .swagger-ui .parameter__name,
+    .swagger-ui .parameter__type,
+    .swagger-ui .response-col_status,
+    .swagger-ui .response-col_description,
+    .swagger-ui .model-title,
+    .swagger-ui .model,
+    .swagger-ui .renderedMarkdown,
+    .swagger-ui .opblock-title,
+    .swagger-ui .tab li,
+    .swagger-ui .tab li a,
+    .swagger-ui .servers-title,
+    .swagger-ui .servers, 
+    .swagger-ui .servers label {
+        color: #e5eefc !important;
+    }
+
+    .swagger-ui input,
+    .swagger-ui select,
+    .swagger-ui textarea {
+        background: #0f172a !important;
+        color: #e5eefc !important;
+        border-color: rgba(148, 163, 184, 0.25) !important;
+    }
+
+    .swagger-ui .topbar-wrapper .link img {
+        height: 28px;
+        width: auto;
+    }
+
+    .swagger-ui .btn.execute,
+    .swagger-ui .btn.authorize {
+        background: linear-gradient(135deg, #0ea5e9, #2563eb) !important;
+        color: white !important;
+        border: none !important;
+    }
+</style>
 <script>
 window.addEventListener('load', function () {{
   var topbarLogo = document.querySelector('.topbar-wrapper .link img');
   if (topbarLogo) {{
-    topbarLogo.src = '{self._agentapi_logo_path}';
+        topbarLogo.src = '{self._agentapi_favicon_path}';
     topbarLogo.alt = 'AgentAPI';
-    topbarLogo.style.height = '36px';
+        topbarLogo.style.height = '28px';
     topbarLogo.style.width = 'auto';
   }}
 }});
@@ -155,11 +229,31 @@ window.addEventListener('load', function () {{
         return get_swagger_ui_oauth2_redirect_html()
 
     async def _redoc_html(self) -> Response:
-        return get_redoc_html(
+        base = get_redoc_html(
             openapi_url=self.openapi_url or "/openapi.json",
             title=f"{self.title} - ReDoc",
             redoc_favicon_url=self._agentapi_favicon_path,
         )
+
+        html = bytes(base.body).decode("utf-8")
+        inject = """
+<style>
+    body {
+        background: #0b1220;
+        color: #e5eefc;
+    }
+
+    redoc, .redoc {
+        background: #0b1220 !important;
+        color: #e5eefc !important;
+    }
+
+    a, button, input, textarea, select {
+        color: inherit;
+    }
+</style>
+"""
+        return HTMLResponse(html.replace("</head>", f"{inject}</head>"))
 
     async def _invoke_handler(self, func: F, *args: Any, **kwargs: Any) -> Any:
         result = func(*args, **kwargs)
@@ -198,7 +292,7 @@ window.addEventListener('load', function () {{
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",
-            },
+      },
         )
 
     def chat(self, path: str, **kwargs: Any) -> Callable[[F], F]:

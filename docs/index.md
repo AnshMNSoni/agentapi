@@ -1,43 +1,72 @@
 # AgentAPI
 
-AgentAPI is a lightweight framework for building agentic AI backends with a familiar Python/FastAPI style.
+AgentAPI is a lightweight framework for building multi-agent AI backends with a familiar Python and FastAPI workflow. It gives you an `Agent` runtime, pluggable memory backends, provider abstraction, streaming support, and a small web layer for shipping real APIs quickly.
 
-## What You Get
+## At A Glance
 
-- A stateful `Agent` with memory and tool calling
-- Provider abstraction for OpenAI, Gemini, and OpenRouter
-- Simple web API layer using `AgentAPI`
-- Built-in streaming support through Server-Sent Events (SSE)
-- CLI commands to scaffold and run projects
+- Build one agent or many agents in the same application
+- Switch providers without changing orchestration code
+- Isolate conversations with per-user or per-session memory
+- Stream responses with Server-Sent Events when needed
+- Scaffold a new project with the CLI in a few seconds
 
-## Core Concepts
+## Core Primitives
 
 ### `Agent`
 
-`Agent` handles prompt orchestration, model calls, tool execution, and conversation memory.
+`Agent` owns the system prompt, provider selection, tool execution, and response flow.
+
+Use it when you want to:
+
+- run a single assistant endpoint
+- chain multiple model calls together
+- give each agent a specialized role such as planner, editor, or summarizer
 
 ### `AgentAPI`
 
-`AgentAPI` extends FastAPI with chat-focused decorators:
+`AgentAPI` extends FastAPI and provides chat-oriented route helpers:
 
-- `@app.chat` for regular or streaming responses
-- `@app.stream` as a streaming-only compatibility alias
+- `@app.chat` for routes that return JSON or SSE depending on the handler output
+- `@app.stream` for explicit streaming-only endpoints
+- branded OpenAPI, Swagger UI, and ReDoc pages
+
+### Memory Backends
+
+AgentAPI keeps memory isolated from the agent logic so you can choose the right storage model:
+
+- `InMemoryMemory` for development, tests, and local multi-agent work
+- `RedisMemory` for production, shared sessions, and multi-worker deployments
 
 ### `@tool`
 
-Mark plain Python functions as LLM-callable tools. AgentAPI builds provider-compatible tool schemas automatically.
+Decorate ordinary Python functions to make them available to the model as tools. AgentAPI converts them into provider-compatible schemas automatically.
 
-## Orchestrating Multiple Agents
+## Quick Start
 
-AgentAPI can coordinate multiple agents in one app, even when they use different providers or different memory backends.
+```python
+from agentapi import Agent, AgentAPI
 
-Common patterns:
+app = AgentAPI()
 
-- Run agents in parallel and merge results with `asyncio.gather()`
-- Assign each agent a separate provider for specialized behavior
-- Give each agent its own `memory` instance to isolate conversations
-- Create unlimited `InMemoryMemory` instances for local dev/testing with zero conflicts
-- Use one agent as a tool inside another agent for delegated reasoning
+assistant = Agent(
+    system_prompt="You are a concise and reliable assistant.",
+    provider="openai",
+)
+
+
+@app.chat("/chat")
+async def chat(message: str):
+    return await assistant.run(message)
+
+
+@app.chat("/stream")
+async def stream_chat(message: str):
+    return assistant.stream(message)
+```
+
+## Multi-Agent Orchestration
+
+AgentAPI is built for composing multiple agents in one app. A common setup is to assign each agent a role and a memory boundary.
 
 ```python
 import asyncio
@@ -48,13 +77,13 @@ app = AgentAPI()
 conversation_id = create_conversation_id()
 
 research_agent = Agent(
-    system_prompt="You are a research assistant.",
+    system_prompt="You are a research specialist.",
     provider="openai",
     memory=RedisMemory(redis_url="redis://localhost:6379", conversation_id=conversation_id),
 )
 
 editor_agent = Agent(
-    system_prompt="You are a concise editor.",
+    system_prompt="You are a precise editor.",
     provider="gemini",
     memory=InMemoryMemory(conversation_id=create_conversation_id()),
 )
@@ -62,57 +91,45 @@ editor_agent = Agent(
 
 @app.post("/orchestrate")
 async def orchestrate(message: str):
-    research_task, edit_task = await asyncio.gather(
+    research, edit = await asyncio.gather(
         research_agent.run(message),
         editor_agent.run(message),
-    ) 
-
-    '''
-    To run sequentially depending on the use case:
-    research_task = await research_agent.run(message)
-    editor_task = await editor_agent.run(message)
-    '''
+    )
 
     return {
-        "research": research_task,
-        "editor": edit_task,
-        "combined": f"Research:\n{research_task}\n\nEditor:\n{edit_task}",
+        "research": research,
+        "edit": edit,
+        "summary": f"Research:\n{research}\n\nEdit:\n{edit}",
     }
 ```
 
-This pattern works well when you want:
+Good orchestration patterns include:
 
-- one agent to draft while another critiques
-- a fast local agent to handle routing while a stronger cloud model handles final answers
-- different tenants or sessions to remain isolated with separate memory objects
+- planner plus executor
+- draft plus critique
+- router plus specialist agents
+- one agent calling another agent as a tool
 
-## Quick Example
+## When To Use Which Memory
 
-```python
-from agentapi import Agent, AgentAPI
+- Use `InMemoryMemory` when you want simple, isolated session state in one process.
+- Use `RedisMemory` when multiple workers or servers must see the same conversation.
+- Give each user, session, or tenant a unique `conversation_id`.
 
-app = AgentAPI()
+## Production Notes
 
-agent = Agent(
-    system_prompt="You are a helpful assistant",
-    provider="openai",
-)
+- Keep the system prompt on the `Agent`, not in the memory backend.
+- Use `RedisMemory` for multi-worker deployments.
+- Use `conversation_id` as the primary isolation key for user sessions.
+- Store agent state per user or per agent if you are orchestrating more than one model.
 
-
-@app.chat("/chat")
-async def chat(message: str):
-    return await agent.run(message)
-
-
-@app.chat("/stream")
-async def stream_chat(message: str):
-    return agent.stream(message)
-```
-
-## Next Steps
+## Documentation Map
 
 1. Start with [Installation](installation.md)
-2. Follow [Getting Started](getting-started.md)
-3. Configure [Providers](providers.md)
-4. Read [Memory](memory.md)
+2. Read [Getting Started](getting-started.md)
+3. Review [Providers](providers.md)
+4. Learn [Memory](memory.md)
 5. Add [Tool Calling](tools.md)
+6. Check [Streaming](streaming.md)
+7. Review [CLI](cli.md)
+8. Read the [FAQ](faq.md)
