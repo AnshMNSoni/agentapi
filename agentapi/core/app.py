@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import asyncio
 from functools import wraps
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable, TypeVar
@@ -27,7 +28,21 @@ F = TypeVar("F", bound=Callable[..., Any])
 class AgentAPI(FastAPI):
     """A small FastAPI extension with AgentAPI-focused decorators."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__( 
+        self,
+       *args: Any,
+        sse_chunk_size: int = 64,
+        sse_heartbeat_seconds: float | None = None,
+       **kwargs: Any,
+    ) -> None:
+        if sse_chunk_size <= 0:
+            raise ValueError("sse_chunk_size must be a positive integer")
+        if sse_heartbeat_seconds is not None and sse_heartbeat_seconds <= 0:
+            raise ValueError("sse_heartbeat_seconds must be positive when set")
+
+        self._sse_chunk_size = sse_chunk_size
+        self._sse_heartbeat_seconds = sse_heartbeat_seconds
+
         kwargs.setdefault("title", "AgentAPI")
         kwargs.setdefault("description", "AgentAPI application")
         kwargs.setdefault("version", "0.1.0")
@@ -262,29 +277,79 @@ window.addEventListener('load', function () {
             result = await result
         return result
 
-    def _iter_token_chunks(self, token: str, *, chunk_size: int = 64) -> AsyncIterator[str]:
-        # Providers may emit large text fragments; split them to keep downstream
-        # streaming UX incremental.
+    def _iter_token_chunks(self, token: str, *, chunk_size: int | None = None) -> AsyncIterator[str]:
+    # Providers may emit large text fragments; split them to keep downstream
+    # streaming UX incremental.
+        size = chunk_size if chunk_size is not None else self._sse_chunk_size
+
         async def _gen() -> AsyncIterator[str]:
             if not token:
                 return
-            for index in range(0, len(token), chunk_size):
-                yield token[index : index + chunk_size]
+            for index in range(0, len(token), size):
+                yield token[index : index + size]
 
         return _gen()
 
     def _to_sse_response(self, source: AsyncIterator[str]) -> StreamingResponse:
+        heartbeat_seconds = self._sse_heartbeat_seconds
+
         async def sse_encoder(stream: AsyncIterator[str]) -> AsyncIterator[str]:
+            # Heartbeat disabled — preserve the original streaming behavior exactly.
+            if not heartbeat_seconds:
+                try:
+                    async for token in stream:
+                        async for chunk in self._iter_token_chunks(str(token)):
+                            yield f"data: {chunk}\n\n"
+                except AgentConfigurationError as exc:
+                    yield f"event: error\ndata: {exc}\n\n"
+                except AgentProviderError as exc:
+                    yield f"event: error\ndata: {exc}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+
+            # Heartbeat enabled — read upstream in a background task and emit
+            # ': keepalive\n\n' whenever no data has arrived for the configured
+            # interval. The ':' prefix is a valid SSE comment that clients
+            # ignore but proxies see as activity, keeping the connection open.
+            queue: asyncio.Queue = asyncio.Queue()
+
+            async def producer() -> None:
+                try:
+                    async for token in stream:
+                        await queue.put(("data", token))
+                except AgentConfigurationError as exc:
+                    await queue.put(("error", str(exc)))
+                except AgentProviderError as exc:
+                    await queue.put(("error", str(exc)))
+                finally:
+                    await queue.put(("done", None))
+
+            task = asyncio.create_task(producer())
             try:
-                async for token in stream:
-                    async for chunk in self._iter_token_chunks(str(token)):
-                        yield f"data: {chunk}\\n\\n"
-            except AgentConfigurationError as exc:
-                # Surface runtime config issues as an SSE error event.
-                yield f"event: error\\ndata: {exc}\\n\\n"
-            except AgentProviderError as exc:
-                yield f"event: error\\ndata: {exc}\\n\\n"
-            yield "data: [DONE]\\n\\n"
+                while True:
+                    try:
+                        kind, payload = await asyncio.wait_for(
+                            queue.get(), timeout=heartbeat_seconds
+                        )
+                    except asyncio.TimeoutError:
+                        yield ": keepalive\n\n"
+                        continue
+
+                    if kind == "done":
+                        yield "data: [DONE]\n\n"
+                        return
+                    if kind == "error":
+                        yield f"event: error\ndata: {payload}\n\n"
+                        continue
+                    # kind == "data"
+                    async for chunk in self._iter_token_chunks(str(payload)):
+                        yield f"data: {chunk}\n\n"
+            finally:
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
         return StreamingResponse(
             sse_encoder(source),
@@ -293,7 +358,7 @@ window.addEventListener('load', function () {
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",
-      },
+            },
         )
 
     def chat(self, path: str, **kwargs: Any) -> Callable[[F], F]:
