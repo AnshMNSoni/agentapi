@@ -158,9 +158,17 @@ class Agent:
                 api_key=self._require_api_key(settings.openrouter_api_key, "OPENROUTER_API_KEY"),
                 model=self.model,
             )
-
+        if self.provider_name == "anthropic":
+            from agentapi.providers.anthropic import AnthropicProvider
+            import os
+            # Use getattr to safely check settings, fallback to os env if settings doesn't have it yet
+            api_key = getattr(settings, "anthropic_api_key", os.getenv("ANTHROPIC_API_KEY"))
+            return AnthropicProvider(
+                api_key=self._require_api_key(api_key, "ANTHROPIC_API_KEY"),
+                model=self.model,
+            )
         raise ValueError(
-            "Unsupported provider. Use one of: openai, gemini, openrouter, or register a custom provider"
+            "Unsupported provider. Use one of: openai, gemini, openrouter, anthropic or register a custom provider"
         )
 
     @classmethod
@@ -189,6 +197,8 @@ class Agent:
     def _default_model_for(self, provider_name: str) -> str:
         if provider_name == "gemini":
             return "gemini-2.5-flash"
+        if provider_name == "anthropic":
+            return "claude-3-5-sonnet-20241022"
         return "gpt-4o-mini"
 
     def _default_tool_calling_for(self, provider_name: str) -> dict[str, Any]:
