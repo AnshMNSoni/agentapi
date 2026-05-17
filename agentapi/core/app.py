@@ -329,10 +329,10 @@ window.addEventListener('load', function () {
                 try:
                     async for token in stream:
                         await queue.put(("data", token))
-                except AgentConfigurationError as exc:
+                except (AgentConfigurationError, AgentProviderError) as exc:
                     await queue.put(("error", str(exc)))
-                except AgentProviderError as exc:
-                    await queue.put(("error", str(exc)))
+                except Exception as exc:  # noqa: BLE001
+                    await queue.put(("error", f"Internal error: {exc}"))
                 finally:
                     await queue.put(("done", None))
 
@@ -358,10 +358,8 @@ window.addEventListener('load', function () {
                         yield f"data: {chunk}\n\n"
             finally:
                 task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError):
                     await task
-                except (asyncio.CancelledError, Exception):
-                    pass
 
         return StreamingResponse(
             sse_encoder(source),
