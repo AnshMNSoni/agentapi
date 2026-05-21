@@ -30,7 +30,63 @@ ProviderFactory = Callable[["Agent", Any, str], BaseProvider]
 
 
 def _resolve_defaults_recursive(annotation: Any, val: Any) -> Any:
+    from typing import get_origin, get_args
+    import types
+    import collections.abc
+
     annotation = _unwrap_annotated(annotation)
+    origin = get_origin(annotation)
+    args = get_args(annotation)
+
+    if origin is not None:
+        # Union/Optional
+        if origin in (types.UnionType, getattr(types, "UnionType", object)) or str(origin) == "typing.Union":
+            if val is None:
+                return None
+            for arg in args:
+                if arg is not type(None):
+                    try:
+                        resolved = _resolve_defaults_recursive(arg, val)
+                        if resolved is not val:
+                            return resolved
+                    except Exception:
+                        pass
+            # Fallback to first non-None arg that doesn't raise an exception
+            for arg in args:
+                if arg is not type(None):
+                    try:
+                        return _resolve_defaults_recursive(arg, val)
+                    except Exception:
+                        pass
+            return val
+
+        # list, Sequence, tuple, set
+        if origin in (list, collections.abc.Sequence, tuple, set):
+            if isinstance(val, (list, tuple, set)):
+                inner_annotation = args[0] if args else Any
+                resolved_list = [
+                    _resolve_defaults_recursive(inner_annotation, item) for item in val
+                ]
+                if origin is tuple:
+                    return tuple(resolved_list)
+                if origin is set:
+                    return set(resolved_list)
+                return resolved_list
+            return val
+
+        # dict, Mapping
+        if origin in (dict, collections.abc.Mapping):
+            if isinstance(val, dict):
+                key_annotation = args[0] if len(args) > 0 else Any
+                val_annotation = args[1] if len(args) > 1 else Any
+                resolved_dict = {}
+                for k, v in val.items():
+                    resolved_k = _resolve_defaults_recursive(key_annotation, k)
+                    resolved_v = _resolve_defaults_recursive(val_annotation, v)
+                    resolved_dict[resolved_k] = resolved_v
+                return resolved_dict
+            return val
+
     try:
         from pydantic import BaseModel
         if inspect.isclass(annotation) and issubclass(annotation, BaseModel):

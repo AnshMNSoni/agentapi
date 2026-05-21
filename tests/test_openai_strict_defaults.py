@@ -214,3 +214,40 @@ def test_complex_regression():
     # Verify defaults are recursively resolved correctly
     assert len(messages) == 1
     assert messages[0]["content"] == "timeout=30, retry=True, tags=['prod'], priority=1"
+
+
+class ItemModel(BaseModel):
+    name: str
+    price: float = 9.99
+
+
+@tool(strict=True)
+def tool_wrapped_types(
+    items: list[ItemModel],
+    config_opt: ConfigModel | None = None,
+    item_map: dict[str, ItemModel] | None = None,
+):
+    items_str = ", ".join(f"{item.name}:{item.price}" for item in items)
+    config_str = f"timeout={config_opt.timeout}" if config_opt else "None"
+    map_str = ", ".join(f"{k}->{v.price}" for k, v in item_map.items()) if item_map else "None"
+    return f"items=[{items_str}], config={config_str}, map={map_str}"
+
+
+def test_wrapped_types_resolution():
+    agent = Agent(system_prompt="test", provider="openai")
+    agent.add_tool(tool_wrapped_types)
+
+    calls = [
+        ToolCall(
+            id="call_5",
+            name="tool_wrapped_types",
+            arguments='{"items": [{"name": "apple", "price": null}], "config_opt": {"timeout": null, "retry": null}, "item_map": {"fav": {"name": "banana", "price": null}}}'
+        )
+    ]
+    messages = []
+
+    import asyncio
+    asyncio.run(agent._execute_tool_calls(calls, messages))
+
+    assert len(messages) == 1
+    assert messages[0]["content"] == "items=[apple:9.99], config=timeout=30, map=fav->9.99"
