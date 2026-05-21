@@ -10,7 +10,6 @@ def test_tool_definition_custom_name_and_context():
         """Add two numbers together."""
         return a + b
 
-    # Verify tool definition attributes
     t_def = to_tool_definition(add_numbers)
     assert isinstance(t_def, ToolDefinition)
     assert t_def.name == "custom_math_tool"
@@ -22,7 +21,6 @@ def test_tool_definition_custom_name_and_context():
     agent = Agent(system_prompt="test", provider="openai")
     agent.add_tool(add_numbers)
 
-    # The tool should be registered under the custom name
     assert "custom_math_tool" in agent._tools
     assert "add_numbers" not in agent._tools
 
