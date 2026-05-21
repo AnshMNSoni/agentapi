@@ -175,7 +175,10 @@ def _resolve_param_schema(annotation: Any, strict: bool = True) -> dict[str, Any
                 base_schema["type"] = [base_type, "null"]
             return base_schema
         elif len(non_none) > 1:
-            return _resolve_param_schema(non_none[0], strict=strict)
+            branch_schemas = [_resolve_param_schema(arg, strict=strict) for arg in non_none]
+            if type(None) in args:
+                branch_schemas.append({"type": "null"})
+            return {"anyOf": branch_schemas}
 
     param_type = _json_type(annotation)
     return {"type": param_type}

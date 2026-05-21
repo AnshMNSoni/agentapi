@@ -243,3 +243,45 @@ def test_wrapped_types_optional_resolution():
     assert len(messages) == 1
     assert messages[0]["content"] == "config=timeout=30"
 
+
+@tool(strict=True)
+def tool_multi_branch_union(value: int | str | None = None):
+    return f"value={value}"
+
+
+def test_multi_branch_union_schema_and_resolution():
+    t_def = to_tool_definition(tool_multi_branch_union)
+    schema = t_def.schema
+    properties = schema["function"]["parameters"]["properties"]
+    assert "value" in properties
+    val_schema = properties["value"]
+    
+    assert "anyOf" in val_schema
+    types_in_union = [item.get("type") for item in val_schema["anyOf"]]
+    assert "integer" in types_in_union
+    assert "string" in types_in_union
+    assert "null" in types_in_union
+
+    agent = Agent(system_prompt="test", provider="openai")
+    agent.add_tool(tool_multi_branch_union)
+
+    # Test int value
+    calls = [ToolCall(id="call_u1", name="tool_multi_branch_union", arguments='{"value": 42}')]
+    messages = []
+    import asyncio
+    asyncio.run(agent._execute_tool_calls(calls, messages))
+    assert messages[0]["content"] == "value=42"
+
+    # Test str value
+    calls2 = [ToolCall(id="call_u2", name="tool_multi_branch_union", arguments='{"value": "hello"}')]
+    messages2 = []
+    asyncio.run(agent._execute_tool_calls(calls2, messages2))
+    assert messages2[0]["content"] == "value=hello"
+
+    # Test null value
+    calls3 = [ToolCall(id="call_u3", name="tool_multi_branch_union", arguments='{"value": null}')]
+    messages3 = []
+    asyncio.run(agent._execute_tool_calls(calls3, messages3))
+    assert messages3[0]["content"] == "value=None"
+
+
