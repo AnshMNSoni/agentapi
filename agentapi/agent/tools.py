@@ -175,6 +175,8 @@ def _resolve_param_schema(annotation: Any, strict: bool = True) -> dict[str, Any
                 base_schema["type"] = [base_type, "null"]
             return base_schema
         elif len(non_none) > 1:
+            # Generate a JSON Schema union construct (anyOf) for multi-branch unions.
+            # If None was in the original union, include "null" in the union list.
             branch_schemas = [_resolve_param_schema(arg, strict=strict) for arg in non_none]
             if type(None) in args:
                 branch_schemas.append({"type": "null"})
