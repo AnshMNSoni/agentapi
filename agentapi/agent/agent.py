@@ -30,7 +30,24 @@ ProviderFactory = Callable[["Agent", Any, str], BaseProvider]
 
 
 def _resolve_defaults_recursive(annotation: Any, val: Any) -> Any:
+    from typing import get_origin, get_args
+    import types
+
     annotation = _unwrap_annotated(annotation)
+    
+    origin = get_origin(annotation)
+    args = get_args(annotation)
+    if origin is not None and (
+        origin in (types.UnionType, getattr(types, "UnionType", object)) or str(origin) == "typing.Union"
+    ):
+        if val is None:
+            return None
+        from pydantic import BaseModel
+        for arg in args:
+            if inspect.isclass(arg) and issubclass(arg, BaseModel):
+                annotation = arg
+                break
+
     try:
         from pydantic import BaseModel
         if inspect.isclass(annotation) and issubclass(annotation, BaseModel):

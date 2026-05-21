@@ -214,3 +214,32 @@ def test_complex_regression():
     # Verify defaults are recursively resolved correctly
     assert len(messages) == 1
     assert messages[0]["content"] == "timeout=30, retry=True, tags=['prod'], priority=1"
+
+
+@tool(strict=True)
+def tool_wrapped_types_optional(
+    config_opt: ConfigModel | None = None,
+):
+    config_str = f"timeout={config_opt.timeout}" if config_opt else "None"
+    return f"config={config_str}"
+
+
+def test_wrapped_types_optional_resolution():
+    agent = Agent(system_prompt="test", provider="openai")
+    agent.add_tool(tool_wrapped_types_optional)
+
+    calls = [
+        ToolCall(
+            id="call_5",
+            name="tool_wrapped_types_optional",
+            arguments='{"config_opt": {"timeout": null, "retry": null}}'
+        )
+    ]
+    messages = []
+
+    import asyncio
+    asyncio.run(agent._execute_tool_calls(calls, messages))
+
+    assert len(messages) == 1
+    assert messages[0]["content"] == "config=timeout=30"
+
